@@ -107,7 +107,7 @@ int main(void)
   MX_TIM4_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-
+  App_Init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -117,6 +117,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    App_Run();
   }
   /* USER CODE END 3 */
 }
@@ -468,6 +469,11 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+{
+  App_UART_TxCpltCallback(huart);
+}
 
 /* USER CODE END 4 */
 

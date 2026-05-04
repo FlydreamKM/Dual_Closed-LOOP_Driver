@@ -1,3 +1,5 @@
-build
+build/
+.vscode/
+.settings/
 mx.scratch
-!.settings
+AGENTS.md
