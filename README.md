@@ -3,6 +3,8 @@
 双路闭环电机驱动器，基于 **STM32F103C8T6**，支持速度/位置双模式闭环控制，集成 **VOFA 上位机** 实时波形显示与调参功能。
 
 > **当前为 VOFA-only 模式**：上电后自动以 200 Hz 输出 JustFloat 波形，调参通过 FireWater 文本命令完成。调试完成后可一键恢复完整二进制协议。
+>
+> **附带高可移植二进制协议驱动**：`Protocol/` 目录下提供独立的帧打包/解析器，四层解耦架构（常量定义 → 帧操作 → 状态机解析器 → HAL 适配层），零平台依赖，可直接移植到其他 MCU 或标准库项目。
 
 ---
 
@@ -16,6 +18,7 @@
 - [快速开始（VOFA 调参）](#快速开始vofa-调参)
 - [构建与烧录](#构建与烧录)
 - [恢复二进制协议](#恢复二进制协议)
+- [独立协议驱动 `Protocol/`](#独立协议驱动-protocol)
 - [项目结构](#项目结构)
 - [默认参数](#默认参数)
 
@@ -442,6 +445,80 @@ openocd -f interface/stlink.cfg -f target/stm32f1x.cfg -c "program build/Debug/D
 
 ---
 
+## 独立协议驱动 `Protocol/`
+
+项目根目录下 `Protocol/` 是一个**独立、高可移植**的二进制通信协议驱动，与 `Core/` 下的业务代码解耦，可随时复制到其他项目中单独使用。
+
+### 文件说明
+
+| 文件 | 职责 | 平台依赖 |
+|------|------|----------|
+| `bp_def.h` | 命令码、响应码、状态机常量定义 | ❌ 无 |
+| `bp_frame.h/.c` | 帧打包/解包（结构体 ↔ 字节流），含校验和计算 | ❌ 无 |
+| `bp_parser.h/.c` | 通用字节流解析器（状态机），支持单字节/批量喂入 | ❌ 无 |
+| `bp_hal_uart.h/.c` | HAL UART 适配层（DMA Circular 接收 + 阻塞发送） | ✅ 仅此处引用 `stm32f1xx_hal.h` |
+| `example/main_example.c` | 完整集成示例（中断回调、命令分发、周期发送 STATUS） | — |
+
+### 架构特点
+
+- **四层解耦**：常量定义 → 帧操作 → 状态机解析器 → HAL 适配层，每层可独立替换
+- **零平台依赖**：`bp_def` / `bp_frame` / `bp_parser` 不引用任何 HAL/平台头文件，仅使用标准 C 库
+- **小端显式处理**：多字节数据用位移操作拼装，不依赖编译器 struct packing
+- **浮点安全**：`memcpy` 直接拷贝 IEEE-754 字节，不做任何数值转换
+- **DMA Circular 双缓冲**：HT + TC 双中断保证低延迟，CPU 零拷贝接收
+
+### 使用方式
+
+**方式一：继续使用 HAL（推荐）**
+
+```c
+#include "bp_hal_uart.h"
+
+bp_hal_uart_t g_bp_uart;
+
+/* 初始化 */
+bp_hal_uart_init(&g_bp_uart, &huart2, my_frame_callback);
+
+/* HAL 回调转发 */
+void HAL_UART_RxHalfCpltCallback(UART_HandleTypeDef *huart) {
+    if (huart == g_bp_uart.huart) bp_hal_uart_rx_half_callback(&g_bp_uart);
+}
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+    if (huart == g_bp_uart.huart) bp_hal_uart_rx_cplt_callback(&g_bp_uart);
+}
+```
+
+**方式二：不使用 HAL（标准库 / LL / 其他 MCU）**
+
+只复制 `bp_def.h` + `bp_frame.h/.c` + `bp_parser.h/.c`，自己实现 UART 层：
+
+```c
+#include "bp_parser.h"
+
+bp_parser_t parser;
+bp_parser_init(&parser, my_callback);
+
+/* 每收到一个字节 */
+bp_parser_feed(&parser, rx_byte);
+
+/* 组帧发送 */
+bp_builder_t b;
+bp_cmd_control_t cmd = { .motor_id = 0, .ctrl_cmd = BP_CTRL_ENABLE };
+uint8_t *frame;
+uint8_t len = bp_build_cmd_control(&b, &cmd, &frame);
+uart_send(frame, len);
+```
+
+### 扩展新命令
+
+如需添加新的命令码或字段：
+1. 在 `bp_def.h` 中定义新的 `CMD_XXX` 宏
+2. 在 `bp_frame.h` 中新增结构体（如 `bp_cmd_xxx_t`）
+3. 在 `bp_frame.c` 中实现对应的 `bp_build_cmd_xxx()` 和 `bp_parse_cmd_xxx()` 函数
+4. 解析器状态机 `bp_parser.c` **无需任何修改**
+
+---
+
 ## 项目结构
 
 ```
@@ -465,6 +542,13 @@ openocd -f interface/stlink.cfg -f target/stm32f1x.cfg -c "program build/Debug/D
 │       ├── protocol.c          # UART RX (DMA) + 命令解析
 │       ├── vofa.c              # JustFloat 波形发送 (UART IT)
 │       └── main.c              # HAL 初始化入口
+├── Protocol/                   # 独立二进制协议驱动（可移植到其他项目）
+│   ├── bp_def.h                # 协议常量定义
+│   ├── bp_frame.h/.c           # 帧打包/解包
+│   ├── bp_parser.h/.c          # 通用字节流解析器（状态机）
+│   ├── bp_hal_uart.h/.c        # HAL UART 适配层
+│   └── example/
+│       └── main_example.c      # 驱动集成示例
 ├── Drivers/                    # STM32 HAL / CMSIS
 ├── cmake/
 ├── CMakeLists.txt
