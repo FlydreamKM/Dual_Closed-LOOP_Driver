@@ -198,8 +198,8 @@ void App_ControlUpdate(void)
         Vofa_SetChannel(&g_vofa, 5, g_app.controller[1].actual_speed);
         Vofa_SetChannel(&g_vofa, 6, g_app.controller[1].actual_angle);
         Vofa_SetChannel(&g_vofa, 7, (float)g_app.controller[1].pwm_output);
-        Vofa_SetChannel(&g_vofa, 8, (float)g_app.controller[0].state);
-        Vofa_SetChannel(&g_vofa, 9, (float)g_app.controller[0].enabled);
+        Vofa_SetChannel(&g_vofa, 8, g_app.controller[1].traj_speed);
+        Vofa_SetChannel(&g_vofa, 9, g_app.controller[1].traj_angle);
         Vofa_Send(&g_vofa);
     }
 
