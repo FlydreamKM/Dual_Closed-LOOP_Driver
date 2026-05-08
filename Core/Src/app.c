@@ -13,7 +13,9 @@
 
 #include "app.h"
 #include "main.h"
+#include "vofa.h"
 #include <string.h>
+#include <stdio.h>
 
 /* HAL handles declared in main.c */
 extern TIM_HandleTypeDef htim1;
@@ -21,10 +23,6 @@ extern TIM_HandleTypeDef htim2;
 extern TIM_HandleTypeDef htim3;
 extern TIM_HandleTypeDef htim4;
 extern UART_HandleTypeDef huart2;
-
-/* DMA handles for UART (defined here to link with HAL) */
-static DMA_HandleTypeDef hdma_usart2_rx;
-static DMA_HandleTypeDef hdma_usart2_tx;
 
 App_t g_app;
 volatile uint8_t g_app_initialized = 0;
@@ -45,37 +43,6 @@ void App_Init(void)
     __HAL_TIM_ENABLE_IT(&htim1, TIM_IT_UPDATE);
     __HAL_TIM_ENABLE_IT(&htim2, TIM_IT_UPDATE);
 
-    /* --- DMA setup for USART2 ------------------------------------------- */
-    __HAL_RCC_DMA1_CLK_ENABLE();
-
-    /* RX DMA: circular mode, high priority */
-    hdma_usart2_rx.Instance = DMA1_Channel6;
-    hdma_usart2_rx.Init.Direction = DMA_PERIPH_TO_MEMORY;
-    hdma_usart2_rx.Init.PeriphInc = DMA_PINC_DISABLE;
-    hdma_usart2_rx.Init.MemInc = DMA_MINC_ENABLE;
-    hdma_usart2_rx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
-    hdma_usart2_rx.Init.MemDataAlignment = DMA_MDATAALIGN_BYTE;
-    hdma_usart2_rx.Init.Mode = DMA_CIRCULAR;
-    hdma_usart2_rx.Init.Priority = DMA_PRIORITY_HIGH;
-    HAL_DMA_Init(&hdma_usart2_rx);
-    __HAL_LINKDMA(&huart2, hdmarx, hdma_usart2_rx);
-
-    /* TX DMA: normal mode, medium priority */
-    hdma_usart2_tx.Instance = DMA1_Channel7;
-    hdma_usart2_tx.Init.Direction = DMA_MEMORY_TO_PERIPH;
-    hdma_usart2_tx.Init.PeriphInc = DMA_PINC_DISABLE;
-    hdma_usart2_tx.Init.MemInc = DMA_MINC_ENABLE;
-    hdma_usart2_tx.Init.PeriphDataAlignment = DMA_PDATAALIGN_BYTE;
-    hdma_usart2_tx.Init.MemDataAlignment = DMA_MDATAALIGN_BYTE;
-    hdma_usart2_tx.Init.Mode = DMA_NORMAL;
-    hdma_usart2_tx.Init.Priority = DMA_PRIORITY_MEDIUM;
-    HAL_DMA_Init(&hdma_usart2_tx);
-    __HAL_LINKDMA(&huart2, hdmatx, hdma_usart2_tx);
-
-    /* Enable DMA TX interrupt (needed for HAL_UART_TxCpltCallback) */
-    HAL_NVIC_SetPriority(DMA1_Channel7_IRQn, 2, 0);
-    HAL_NVIC_EnableIRQ(DMA1_Channel7_IRQn);
-
     /* --- Motor / Encoder / Controller init ------------------------------ */
     /* Motor 1: TIM2 enc, TIM4 PWM, PB7 dir */
     Encoder_Init(&g_app.encoder[0], &htim2);
@@ -89,6 +56,9 @@ void App_Init(void)
 
     /* --- Protocol init -------------------------------------------------- */
     Protocol_Init(&g_app.protocol, &huart2);
+
+    /* --- VOFA init ------------------------------------------------------ */
+    Vofa_Init(&g_vofa, &huart2);
 
     g_app.status_interval_ms = 0;   /* standard binary status: disabled in VOFA mode */
     g_app.vofa_interval_ms = 5;     /* VOFA JustFloat default 200 Hz */
@@ -217,40 +187,40 @@ void App_ControlUpdate(void)
     }
 #endif
 
-    /* VOFA JustFloat waveform output */
+    /* VOFA JustFloat output (non-blocking UART IT mode) */
     if (g_app.vofa_interval_ms > 0 &&
         (g_app.control_tick % g_app.vofa_interval_ms) == 0) {
-        float ch[10];
-        ch[0] = g_app.controller[0].actual_speed;
-        ch[1] = g_app.controller[0].actual_angle;
-        ch[2] = (float)g_app.controller[0].pwm_output;
-        ch[3] = g_app.controller[0].traj_speed;
-        ch[4] = g_app.controller[0].traj_angle;
-        ch[5] = g_app.controller[1].actual_speed;
-        ch[6] = g_app.controller[1].actual_angle;
-        ch[7] = (float)g_app.controller[1].pwm_output;
-        ch[8] = g_app.controller[1].traj_speed;
-        ch[9] = g_app.controller[1].traj_angle;
-        Protocol_SendVofaJustFloat(&g_app.protocol, ch, 10);
+        Vofa_SetChannel(&g_vofa, 0, g_app.controller[0].actual_speed);
+        Vofa_SetChannel(&g_vofa, 1, g_app.controller[0].actual_angle);
+        Vofa_SetChannel(&g_vofa, 2, (float)g_app.controller[0].pwm_output);
+        Vofa_SetChannel(&g_vofa, 3, g_app.controller[0].traj_speed);
+        Vofa_SetChannel(&g_vofa, 4, g_app.controller[0].traj_angle);
+        Vofa_SetChannel(&g_vofa, 5, g_app.controller[1].actual_speed);
+        Vofa_SetChannel(&g_vofa, 6, g_app.controller[1].actual_angle);
+        Vofa_SetChannel(&g_vofa, 7, (float)g_app.controller[1].pwm_output);
+        Vofa_SetChannel(&g_vofa, 8, (float)g_app.controller[0].state);
+        Vofa_SetChannel(&g_vofa, 9, (float)g_app.controller[0].enabled);
+        Vofa_Send(&g_vofa);
     }
 
-    /* 1 Hz debug heartbeat from control loop */
-    if ((g_app.control_tick % 1000) == 0) {
-        const char *dbg = "[DBG] Control tick 1s\r\n";
-        HAL_UART_Transmit(&huart2, (uint8_t *)dbg, strlen(dbg), 100);
-    }
 }
 
 void App_Run(void)
 {
     while (1) {
-        /* Idle loop: all real-time work is done in App_ControlUpdate().
-         * Here we can place non-critical background tasks if needed. */
-
-        /* --- Heartbeat for verifying UART link (1 Hz) ------------------- */
         HAL_Delay(1000);
-        const char *hb = "[HB] System alive\r\n";
-        HAL_UART_Transmit(&huart2, (uint8_t *)hb, strlen(hb), 100);
+
+        /* 1 Hz diagnostic output (sent from main loop to avoid blocking ISR) */
+        char dbg[180];
+        int n = snprintf(dbg, sizeof(dbg),
+            "[DBG] M0 st=%d en=%d md=%d tgt=%d traj=%d pwm=%d | M1 st=%d en=%d md=%d pwm=%d\r\n",
+            (int)g_app.controller[0].state, (int)g_app.controller[0].enabled, (int)g_app.controller[0].mode,
+            (int)(g_app.controller[0].target_speed * 100.0f),
+            (int)(g_app.controller[0].traj_speed  * 100.0f),
+            (int)g_app.controller[0].pwm_output,
+            (int)g_app.controller[1].state, (int)g_app.controller[1].enabled, (int)g_app.controller[1].mode,
+            (int)g_app.controller[1].pwm_output);
+        HAL_UART_Transmit(&huart2, (uint8_t *)dbg, n, 100);
     }
 }
 
@@ -262,8 +232,4 @@ void App_UART_TxCpltCallback(UART_HandleTypeDef *huart)
     }
 }
 
-/* DMA1 Channel7 IRQ handler (USART2 TX) */
-void App_DMA1_Channel7_IRQHandler(void)
-{
-    HAL_DMA_IRQHandler(&hdma_usart2_tx);
-}
+

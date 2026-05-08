@@ -14,6 +14,7 @@
 
 #include "protocol.h"
 #include <string.h>
+#include <stdio.h>
 
 #define FRAME_SOF0  0xAA
 #define FRAME_SOF1  0x55
@@ -348,6 +349,46 @@ void Protocol_SendAck(Protocol_t *proto, uint8_t cmd, uint8_t result)
 
 void Protocol_SendVofaJustFloat(Protocol_t *proto, float *channels, uint8_t num_channels)
 {
+    static uint32_t call_cnt = 0;
+    static HAL_StatusTypeDef last_status = HAL_OK;
+    call_cnt++;
+
+    /* ---- 1 Hz register diagnostic (every 200 calls @ 5 ms) ----------- */
+    if ((call_cnt % 200) == 1) {
+        char dbg[160];
+        int n;
+        UART_HandleTypeDef *hu = proto->huart;
+        DMA_HandleTypeDef  *hd = (hu && hu->hdmatx) ? hu->hdmatx : NULL;
+
+        n = snprintf(dbg, sizeof(dbg),
+                     "[DIAG] txb=%d gS=%02lX hS=%02lX hL=%02lX last_ret=%d\r\n",
+                     (int)proto->tx_busy,
+                     (unsigned long)(hu ? hu->gState : 0xFF),
+                     (unsigned long)(hd ? hd->State : 0xFF),
+                     (unsigned long)(hd ? hd->Lock : 0xFF),
+                     (int)last_status);
+        HAL_UART_Transmit(hu, (uint8_t *)dbg, n, 50);
+
+        n = snprintf(dbg, sizeof(dbg),
+                     "[DIAG] CCR=%08lX CNDTR=%lu CR3=%08lX SR=%08lX\r\n",
+                     (unsigned long)(hd && hd->Instance ? hd->Instance->CCR : 0),
+                     (unsigned long)(hd && hd->Instance ? hd->Instance->CNDTR : 0),
+                     (unsigned long)(hu ? hu->Instance->CR3 : 0),
+                     (unsigned long)(hu ? hu->Instance->SR : 0));
+        HAL_UART_Transmit(hu, (uint8_t *)dbg, n, 50);
+    }
+    /* ------------------------------------------------------------------ */
+
+    /* Poll DMA completion: if DMA channel is no longer enabled (EN=0),
+       the transfer has finished. This works around a missing DMA TC IRQ. */
+    if (proto->tx_busy && proto->huart->hdmatx && proto->huart->hdmatx->Instance) {
+        if ((proto->huart->hdmatx->Instance->CCR & DMA_CCR_EN) == 0) {
+            proto->tx_busy = 0;
+            proto->huart->gState = HAL_UART_STATE_READY;
+            proto->huart->ErrorCode = HAL_UART_ERROR_NONE;
+        }
+    }
+
     if (proto->tx_busy) return;
     if (num_channels == 0) return;
 
@@ -365,12 +406,32 @@ void Protocol_SendVofaJustFloat(Protocol_t *proto, float *channels, uint8_t num_
     p[idx++] = VOFA_TAIL_2;
     p[idx++] = VOFA_TAIL_3;
 
-    if (HAL_UART_Transmit_DMA(proto->huart, proto->tx_buf, idx) == HAL_OK) {
+    /* Workaround: force DMA/UART state reset before every transmission
+       to bypass possible HAL state machine dead-lock. */
+    if (proto->huart->hdmatx != NULL) {
+        __HAL_DMA_DISABLE(proto->huart->hdmatx);
+        proto->huart->hdmatx->State = HAL_DMA_STATE_READY;
+        proto->huart->hdmatx->Lock = HAL_UNLOCKED;
+    }
+    if (proto->huart->gState != HAL_UART_STATE_READY) {
+        proto->huart->gState = HAL_UART_STATE_READY;
+        proto->huart->ErrorCode = HAL_UART_ERROR_NONE;
+    }
+
+    last_status = HAL_UART_Transmit_DMA(proto->huart, proto->tx_buf, idx);
+
+    if (last_status == HAL_OK) {
         proto->tx_busy = 1;
     }
 }
 
 void Protocol_TxCompleteCallback(Protocol_t *proto)
 {
+    static uint32_t cplt_cnt = 0;
+    cplt_cnt++;
+    if ((cplt_cnt % 200) == 0) {
+        const char *msg = "[DIAG] TX Cplt OK\r\n";
+        HAL_UART_Transmit(proto->huart, (uint8_t *)msg, strlen(msg), 50);
+    }
     proto->tx_busy = 0;
 }

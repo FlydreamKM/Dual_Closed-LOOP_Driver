@@ -59,6 +59,9 @@ float PID_Update(PID_t *pid, float setpoint, float actual)
         pid->integral = -pid->integral_limit;
     }
 
+    /* Re-calculate P+I after integral clamping */
+    pre_output = pid->Kp * error + pid->Ki * pid->integral;
+
     /* Derivative */
     float derivative = error - pid->prev_error;
     pid->prev_error = error;

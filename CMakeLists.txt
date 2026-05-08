@@ -49,6 +49,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/motor.c
     Core/Src/controller.c
     Core/Src/protocol.c
+    Core/Src/vofa.c
     Core/Src/app.c
 )
 

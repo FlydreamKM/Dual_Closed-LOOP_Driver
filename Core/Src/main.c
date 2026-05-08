@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "vofa.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -50,7 +50,8 @@ TIM_HandleTypeDef htim4;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-
+DMA_HandleTypeDef hdma_usart2_rx;
+DMA_HandleTypeDef hdma_usart2_tx;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -472,6 +473,7 @@ static void MX_GPIO_Init(void)
 
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 {
+  Vofa_TxCpltCallback(&g_vofa);
   App_UART_TxCpltCallback(huart);
 }
 
