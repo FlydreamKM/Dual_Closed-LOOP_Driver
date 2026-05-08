@@ -23,6 +23,7 @@
 #define VOFA_TAIL_2 0x80
 #define VOFA_TAIL_3 0x7f
 
+#if !PROTOCOL_VOFA_ONLY
 static uint8_t CalcChecksum(uint8_t *data, uint16_t len)
 {
     uint8_t sum = 0;
@@ -31,6 +32,7 @@ static uint8_t CalcChecksum(uint8_t *data, uint16_t len)
     }
     return sum;
 }
+#endif
 
 /* Lightweight ASCII to float parser (no libc dependency, no exp notation) */
 static float simple_atof(const char *s, char **endptr)
@@ -171,10 +173,12 @@ void Protocol_ProcessRx(Protocol_t *proto)
     uint16_t write_idx = proto->rx_write_idx;
     uint16_t read_idx = proto->rx_read_idx;
 
+#if !PROTOCOL_VOFA_ONLY
     static uint8_t frame_buf[64];
     static uint8_t frame_state = 0;
     static uint8_t frame_len = 0;
     static uint8_t frame_idx = 0;
+#endif
 
     while (read_idx != write_idx) {
         uint8_t byte = proto->rx_dma_buf[read_idx];
@@ -220,7 +224,7 @@ void Protocol_ProcessRx(Protocol_t *proto)
 
                         switch (cmd) {
                             case CMD_SET_TARGET:
-                                if (frame_len >= 18) {
+                                if (frame_len >= 19) {
                                     pcmd.motor_id = frame_buf[1];
                                     pcmd.data.target.mode = frame_buf[2];
                                     memcpy(&pcmd.data.target.target_speed, &frame_buf[3], 4);
@@ -232,7 +236,7 @@ void Protocol_ProcessRx(Protocol_t *proto)
                                 break;
 
                             case CMD_SET_PID:
-                                if (frame_len >= 14) {
+                                if (frame_len >= 15) {
                                     pcmd.motor_id = frame_buf[1];
                                     pcmd.data.pid.pid_type = frame_buf[2];
                                     memcpy(&pcmd.data.pid.kp, &frame_buf[3], 4);
@@ -353,7 +357,8 @@ void Protocol_SendVofaJustFloat(Protocol_t *proto, float *channels, uint8_t num_
     static HAL_StatusTypeDef last_status = HAL_OK;
     call_cnt++;
 
-    /* ---- 1 Hz register diagnostic (every 200 calls @ 5 ms) ----------- */
+    /* ---- 1 Hz register diagnostic (disabled) ------------------------ */
+#if 0
     if ((call_cnt % 200) == 1) {
         char dbg[160];
         int n;
@@ -377,6 +382,7 @@ void Protocol_SendVofaJustFloat(Protocol_t *proto, float *channels, uint8_t num_
                      (unsigned long)(hu ? hu->Instance->SR : 0));
         HAL_UART_Transmit(hu, (uint8_t *)dbg, n, 50);
     }
+#endif
     /* ------------------------------------------------------------------ */
 
     /* Poll DMA completion: if DMA channel is no longer enabled (EN=0),
@@ -429,9 +435,11 @@ void Protocol_TxCompleteCallback(Protocol_t *proto)
 {
     static uint32_t cplt_cnt = 0;
     cplt_cnt++;
+#if 0
     if ((cplt_cnt % 200) == 0) {
         const char *msg = "[DIAG] TX Cplt OK\r\n";
         HAL_UART_Transmit(proto->huart, (uint8_t *)msg, strlen(msg), 50);
     }
+#endif
     proto->tx_busy = 0;
 }

@@ -210,7 +210,8 @@ void App_Run(void)
     while (1) {
         HAL_Delay(1000);
 
-        /* 1 Hz diagnostic output (sent from main loop to avoid blocking ISR) */
+        /* Diagnostic output disabled -- re-enable here if needed for debugging */
+#if 0
         char dbg[180];
         int n = snprintf(dbg, sizeof(dbg),
             "[DBG] M0 st=%d en=%d md=%d tgt=%d traj=%d pwm=%d | M1 st=%d en=%d md=%d pwm=%d\r\n",
@@ -221,6 +222,7 @@ void App_Run(void)
             (int)g_app.controller[1].state, (int)g_app.controller[1].enabled, (int)g_app.controller[1].mode,
             (int)g_app.controller[1].pwm_output);
         HAL_UART_Transmit(&huart2, (uint8_t *)dbg, n, 100);
+#endif
     }
 }
 
