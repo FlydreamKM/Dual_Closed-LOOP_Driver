@@ -27,6 +27,7 @@ static DMA_HandleTypeDef hdma_usart2_rx;
 static DMA_HandleTypeDef hdma_usart2_tx;
 
 App_t g_app;
+volatile uint8_t g_app_initialized = 0;
 
 static void App_ProcessCommand(ProtocolCmd_t *cmd);
 
@@ -91,6 +92,19 @@ void App_Init(void)
 
     g_app.status_interval_ms = 0;   /* standard binary status: disabled in VOFA mode */
     g_app.vofa_interval_ms = 5;     /* VOFA JustFloat default 200 Hz */
+
+    /* --- Startup UART debug message (blocking, no DMA dependency) ----- */
+    {
+        const char *boot_msg =
+            "\r\n========================================\r\n"
+            "[BOOT] Dual Closed-LOOP Driver started.\r\n"
+            "[BOOT] UART2 OK. Baud=115200 8N1.\r\n"
+            "[BOOT] Waiting for commands...\r\n"
+            "========================================\r\n";
+        HAL_UART_Transmit(&huart2, (uint8_t *)boot_msg, strlen(boot_msg), 300);
+    }
+
+    g_app_initialized = 1;
 }
 
 static void App_ProcessCommand(ProtocolCmd_t *cmd)
@@ -219,6 +233,12 @@ void App_ControlUpdate(void)
         ch[9] = g_app.controller[1].traj_angle;
         Protocol_SendVofaJustFloat(&g_app.protocol, ch, 10);
     }
+
+    /* 1 Hz debug heartbeat from control loop */
+    if ((g_app.control_tick % 1000) == 0) {
+        const char *dbg = "[DBG] Control tick 1s\r\n";
+        HAL_UART_Transmit(&huart2, (uint8_t *)dbg, strlen(dbg), 100);
+    }
 }
 
 void App_Run(void)
@@ -226,6 +246,11 @@ void App_Run(void)
     while (1) {
         /* Idle loop: all real-time work is done in App_ControlUpdate().
          * Here we can place non-critical background tasks if needed. */
+
+        /* --- Heartbeat for verifying UART link (1 Hz) ------------------- */
+        HAL_Delay(1000);
+        const char *hb = "[HB] System alive\r\n";
+        HAL_UART_Transmit(&huart2, (uint8_t *)hb, strlen(hb), 100);
     }
 }
 

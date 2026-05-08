@@ -32,6 +32,7 @@ typedef struct {
 } App_t;
 
 extern App_t g_app;
+extern volatile uint8_t g_app_initialized;
 
 void App_Init(void);
 void App_ControlUpdate(void);  /* 1 kHz, called from SysTick or main loop */

@@ -340,8 +340,9 @@ void Protocol_SendAck(Protocol_t *proto, uint8_t cmd, uint8_t result)
     p[5] = result;      /* DATA[1] */
     p[6] = CalcChecksum(&p[3], 3);  /* CHK over CMD+DATA */
 
-    proto->tx_busy = 1;
-    HAL_UART_Transmit_DMA(proto->huart, proto->tx_buf, 7);
+    if (HAL_UART_Transmit_DMA(proto->huart, proto->tx_buf, 7) == HAL_OK) {
+        proto->tx_busy = 1;
+    }
 #endif
 }
 
@@ -364,8 +365,9 @@ void Protocol_SendVofaJustFloat(Protocol_t *proto, float *channels, uint8_t num_
     p[idx++] = VOFA_TAIL_2;
     p[idx++] = VOFA_TAIL_3;
 
-    proto->tx_busy = 1;
-    HAL_UART_Transmit_DMA(proto->huart, proto->tx_buf, idx);
+    if (HAL_UART_Transmit_DMA(proto->huart, proto->tx_buf, idx) == HAL_OK) {
+        proto->tx_busy = 1;
+    }
 }
 
 void Protocol_TxCompleteCallback(Protocol_t *proto)

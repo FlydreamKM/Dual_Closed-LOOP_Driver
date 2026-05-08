@@ -189,7 +189,9 @@ void SysTick_Handler(void)
   /* USER CODE END SysTick_IRQn 0 */
   HAL_IncTick();
   /* USER CODE BEGIN SysTick_IRQn 1 */
-  App_ControlUpdate();
+  if (g_app_initialized) {
+    App_ControlUpdate();
+  }
   /* USER CODE END SysTick_IRQn 1 */
 }
 
