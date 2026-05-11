@@ -4,8 +4,9 @@
   * @file    encoder.h
   * @brief   Quadrature encoder interface with overflow tracking.
   *
-  * Encoder spec: 1024-line, 4x decoding (TI12), motor 1 rev = encoder 2 rev.
-  * -> 8192 TIM counts per motor revolution.
+  * Encoder spec: 1024-line, 4x decoding (TI12).
+  * Gear chain: Motor(16T) -> Wheel(68T) -> Encoder(30T).
+  * -> 4096 * (16/30) ≈ 2184.5 TIM counts per motor revolution.
   ******************************************************************************
   */
 /* USER CODE END Header */
@@ -22,8 +23,15 @@ extern "C" {
 
 #define ENCODER_CPR                 1024
 #define ENCODER_MULTIPLY            4
-#define ENCODER_GEAR_RATIO          2.0f
-#define ENCODER_COUNTS_PER_MOTOR_REV (float)(ENCODER_CPR * ENCODER_MULTIPLY * 2) /* 8192 */
+
+/* Gear chain: Motor(16T) -> Wheel(68T) -> Encoder(30T).
+ * Effective ratio = (16/68) * (68/30) = 16/30 encoder revs per motor rev. */
+#define MOTOR_GEAR_TEETH            16u
+#define WHEEL_GEAR_TEETH            68u
+#define ENCODER_GEAR_TEETH          30u
+#define ENCODER_GEAR_RATIO          ((float)MOTOR_GEAR_TEETH / (float)WHEEL_GEAR_TEETH * (float)WHEEL_GEAR_TEETH / (float)ENCODER_GEAR_TEETH)
+
+#define ENCODER_COUNTS_PER_MOTOR_REV ((float)ENCODER_CPR * (float)ENCODER_MULTIPLY * ENCODER_GEAR_RATIO)
 
 typedef struct {
     TIM_HandleTypeDef *htim;

@@ -10,7 +10,7 @@
 #include "encoder.h"
 #include <math.h>
 
-#define COUNTS_PER_REV  8192.0f
+#define COUNTS_PER_REV  ENCODER_COUNTS_PER_MOTOR_REV
 #define TWO_PI          6.283185307f
 
 void Encoder_Init(Encoder_t *enc, TIM_HandleTypeDef *htim)
