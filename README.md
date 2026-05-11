@@ -2,7 +2,7 @@
 
 双路闭环电机驱动器，基于 **STM32F103C8T6**，支持速度/位置双模式闭环控制，集成 **VOFA 上位机** 实时波形显示与调参功能。
 
-> **当前为 VOFA-only 模式**：上电后自动以 200 Hz 输出 JustFloat 波形，调参通过 FireWater 文本命令完成。调试完成后可一键恢复完整二进制协议。
+> **当前为 VOFA-only 模式**：上电后自动以 200 Hz 输出 JustFloat 波形，调参通过 FireWater 文本命令完成。修改 `PROTOCOL_VOFA_ONLY` 为 `0` 可切换为纯二进制协议模式。
 >
 > **附带高可移植二进制协议驱动**：`Protocol/` 目录下提供独立的帧打包/解析器，四层解耦架构（常量定义 → 帧操作 → 状态机解析器 → HAL 适配层），零平台依赖，可直接移植到其他 MCU 或标准库项目。
 
@@ -17,7 +17,7 @@
   - [二进制帧协议](#二进制帧协议)
 - [快速开始（VOFA 调参）](#快速开始vofa-调参)
 - [构建与烧录](#构建与烧录)
-- [恢复二进制协议](#恢复二进制协议)
+- [切换为二进制协议模式](#切换为二进制协议模式)
 - [独立协议驱动 `Protocol/`](#独立协议驱动-protocol)
 - [项目结构](#项目结构)
 - [默认参数](#默认参数)
@@ -99,10 +99,10 @@ TIM3/TIM4 的 ARR 在启动时被动态修改为 **1799**，得到：
 
 本项目支持**双协议切换**，通过 `protocol.h` 中的宏控制：
 
-| 模式 | 下发指令 | 回传波形 | 适用场景 |
+| 模式 | 下发指令 | 上行数据 | 适用场景 |
 |------|----------|----------|----------|
 | **VOFA-only**（默认） | FireWater 文本命令 | JustFloat | 调参、波形观察 |
-| **Binary**（可恢复） | 二进制帧协议 | 标准 STATUS 帧 | 自定义上位机、高可靠通信 |
+| **Binary-only** | 二进制帧协议（`0xAA 0x55`） | STATUS / ACK 帧 | 自定义上位机、高可靠通信 |
 
 ### VOFA-only 模式（当前默认）
 
@@ -275,7 +275,7 @@ V 0                        (关闭波形输出)
 S <motor>
 ```
 
-> **注意**：仅在 `PROTOCOL_VOFA_ONLY = 0`（二进制协议模式）时有效。VOFA-only 模式下该命令被忽略。
+> **注意**：仅在 `PROTOCOL_VOFA_ONLY = 0`（二进制协议模式）时有效。VOFA-only 模式下无此命令。
 
 ---
 
@@ -318,7 +318,7 @@ C 0 0
 
 ### 二进制帧协议
 
-当 `PROTOCOL_VOFA_ONLY = 0` 时，下位机启用车载二进制帧协议，适用于自定义上位机或高可靠通信场景。
+当 `PROTOCOL_VOFA_ONLY = 0` 时，下位机仅使用二进制帧协议进行通信，FireWater 文本命令与 JustFloat 均被禁用。
 
 **帧格式**：
 
@@ -339,7 +339,7 @@ C 0 0
 | `0x03` | CONTROL | 3 | 控制指令（使能/失能/急停/回零/清除故障） |
 | `0x04` | REQ_STATUS | 1~2 | 请求状态帧 |
 | `0x05` | HEARTBEAT | 1~2 | 心跳包 |
-| `0x06` | SET_VOFA | 3 | 设置 JustFloat 输出频率 |
+| `0x06` | SET_VOFA | 3 | 设置 JustFloat 输出频率（仅在 VOFA-only 模式下有效） |
 
 **上行响应码**（下位机 → 上位机）：
 
@@ -425,9 +425,9 @@ openocd -f interface/stlink.cfg -f target/stm32f1x.cfg -c "program build/Debug/D
 
 ---
 
-## 恢复二进制协议
+## 切换为二进制协议模式
 
-调参完成后，如需对接自定义上位机，恢复完整二进制帧协议：
+如需对接自定义上位机，切换为纯二进制帧协议：
 
 1. 打开 `Core/Inc/protocol.h`
 2. 修改第 32 行：
@@ -436,11 +436,11 @@ openocd -f interface/stlink.cfg -f target/stm32f1x.cfg -c "program build/Debug/D
    ```
 3. 重新编译烧录
 
-恢复后将启用：
-- 二进制帧收发（`0xAA 0x55` 帧头，带校验和）
-- 标准状态回传帧（`0x81`）
+切换后：
+- 仅收发二进制帧（`0xAA 0x55` 帧头，带校验和）
+- 自动周期性发送 STATUS 帧（`0x81`），默认 100 Hz
 - 心跳应答（`0x85`）
-- 同时保留 VOFA JustFloat 和文本命令支持
+- FireWater 文本命令与 JustFloat 均被禁用
 
 > 二进制协议完整定义见 [`COMM_PROTOCOL.md`](COMM_PROTOCOL.md)。
 
@@ -579,4 +579,4 @@ uart_send(frame, len);
 1. **USER CODE 保护**：`main.c`、`stm32f1xx_it.c`、`stm32f1xx_hal_msp.c` 中所有自定义代码均置于 `USER CODE BEGIN/END` 块内，重新生成 CubeMX 代码时不会被覆盖。
 2. **不要修改 HAL 源码**：`Drivers/STM32F1xx_HAL_Driver/` 为生成代码，如需修改配置请调整 `.ioc` 文件后重新生成。
 3. **编码器溢出**：控制周期 1 ms 内电机不可能溢出 16 位计数器（理论极限约 4000 转/秒），溢出处理仅作为极端工况保险。
-4. **VOFA 与二进制共存**：`PROTOCOL_VOFA_ONLY = 0` 时，系统同时接受二进制帧和 FireWater 文本命令，发送端 JustFloat 和标准 STATUS 帧独立运行，冲突时自动跳过。
+4. **协议模式互斥**：`PROTOCOL_VOFA_ONLY = 1` 时仅支持 VOFA JustFloat + FireWater 文本命令；`PROTOCOL_VOFA_ONLY = 0` 时仅支持二进制帧收发。两种模式不共存。

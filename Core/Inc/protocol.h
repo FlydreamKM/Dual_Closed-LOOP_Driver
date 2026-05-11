@@ -26,10 +26,10 @@ extern "C" {
 #include <stdint.h>
 
 /* Protocol mode switch:
- *   1 = VOFA-only (FireWater text commands + JustFloat output)
- *   0 = Full binary protocol + VOFA support
- * Change to 0 when debugging is complete to restore original binary protocol. */
-#define PROTOCOL_VOFA_ONLY      1
+ *   1 = VOFA-only (FireWater text commands + JustFloat output only)
+ *   0 = Binary-only (0xAA 0x55 frames only, no JustFloat output)
+ */
+#define PROTOCOL_VOFA_ONLY      0
 
 #define PROTOCOL_RX_BUF_SIZE    256
 #define PROTOCOL_TX_BUF_SIZE    256
@@ -120,8 +120,10 @@ void Protocol_SendStatus(Protocol_t *proto, uint8_t motor_id, uint8_t mode_state
                          int16_t pwm_output, int32_t encoder_total, uint8_t fault);
 void Protocol_SendAck(Protocol_t *proto, uint8_t cmd, uint8_t result);
 
+#if PROTOCOL_VOFA_ONLY
 /* VOFA JustFloat waveform output */
 void Protocol_SendVofaJustFloat(Protocol_t *proto, float *channels, uint8_t num_channels);
+#endif
 
 void Protocol_TxCompleteCallback(Protocol_t *proto);
 

@@ -1,7 +1,7 @@
 # Dual_Closed-LOOP_Driver 二进制通信协议（详细版）
 
 > **物理层**：UART2，115200-8-N1，小端模式 (Little-Endian)  
-> **适用模式**：`PROTOCOL_VOFA_ONLY = 0`（完整二进制协议）或 `PROTOCOL_VOFA_ONLY = 1`（FireWater 文本命令始终可用）  
+> **适用模式**：`PROTOCOL_VOFA_ONLY = 0`（纯二进制协议）或 `PROTOCOL_VOFA_ONLY = 1`（纯 VOFA 模式）  
 > **版本**：v2.0 — 修正 `CMD_SET_TARGET` / `CMD_SET_PID` 帧长度定义
 
 ---
@@ -256,7 +256,7 @@ AA 55 03 03 00 00 XX
 
 ### 4.6 CMD_SET_VOFA (0x06)
 
-设置 JustFloat 波形输出频率（仅在 `PROTOCOL_VOFA_ONLY = 0` 时有效，此时 JustFloat 与二进制协议共存）。
+设置 JustFloat 波形输出频率（仅在 `PROTOCOL_VOFA_ONLY = 1` 时有效）。
 
 **帧结构**：
 
@@ -516,25 +516,17 @@ uart_send((uint8_t *)&speed, 4);  // 发送 00 00 A0 40
 
 若未接编码器，`actual_speed` 始终为 0，PID 速度环误差 = `traj_speed − 0`，积分会持续 windup 到限制值，最终 PWM 输出稳定在约 260（取决于 PID 参数）。接上编码器后，PWM 会立即下降到与实际负载匹配的稳态值。
 
-### 4. 与 FireWater 文本命令共存
+### 4. 模式切换
 
-当 `PROTOCOL_VOFA_ONLY = 0` 时，下位机**同时监听**二进制帧和 FireWater 文本命令。两者共享同一条 UART 链路，解析器自动识别：
-- 收到 `0xAA` 开头 → 按二进制状态机解析
-- 收到可打印 ASCII 字符 → 按文本行缓存，遇 `\n` 解析
-
-**不要**在二进制帧中间插入文本字符，会导致帧同步丢失。
-
-### 5. 模式切换
-
-恢复完整二进制协议：
+两种模式**互斥**，通过宏切换：
 
 ```c
 // Core/Inc/protocol.h 第 32 行
 #define PROTOCOL_VOFA_ONLY      0   /* 将 1 改为 0 */
 ```
 
-重新编译后：
-- 二进制帧收发启用（本协议文档生效）
-- FireWater 文本命令**仍然可用**
-- JustFloat 波形输出**仍然可用**
+- `PROTOCOL_VOFA_ONLY = 1`：仅解析 FireWater 文本命令，仅发送 JustFloat 波形。
+- `PROTOCOL_VOFA_ONLY = 0`：仅解析二进制帧（`0xAA 0x55`），仅发送二进制 STATUS / ACK 帧。
+
+**不要**在两种模式间混用协议，会导致数据解析错误。
 - 标准 STATUS 帧按 `status_interval_ms` 间隔自动发送

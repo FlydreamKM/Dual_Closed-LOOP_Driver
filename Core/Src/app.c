@@ -60,8 +60,13 @@ void App_Init(void)
     /* --- VOFA init ------------------------------------------------------ */
     Vofa_Init(&g_vofa, &huart2);
 
-    g_app.status_interval_ms = 0;   /* standard binary status: disabled in VOFA mode */
+#if PROTOCOL_VOFA_ONLY
+    g_app.status_interval_ms = 0;   /* binary STATUS disabled */
     g_app.vofa_interval_ms = 5;     /* VOFA JustFloat default 200 Hz */
+#else
+    g_app.status_interval_ms = 10;  /* binary STATUS auto-send 100 Hz */
+    g_app.vofa_interval_ms = 0;     /* JustFloat disabled */
+#endif
 
     /* --- Startup UART debug message (blocking, no DMA dependency) ----- */
     {
@@ -171,22 +176,7 @@ void App_ControlUpdate(void)
         App_ProcessCommand(&cmd);
     }
 
-    /* Periodic standard binary status transmission (disabled in VOFA-only mode) */
-#if !PROTOCOL_VOFA_ONLY
-    if (g_app.status_interval_ms > 0 &&
-        (g_app.control_tick % g_app.status_interval_ms) == 0) {
-        for (int i = 0; i < MOTOR_NUM; i++) {
-            MotorController_t *ctrl = &g_app.controller[i];
-            uint8_t mode_state = (ctrl->mode & 0x0F) | ((ctrl->state & 0x0F) << 4);
-            Protocol_SendStatus(&g_app.protocol, i, mode_state,
-                                ctrl->actual_speed, ctrl->actual_angle,
-                                ctrl->traj_speed, ctrl->traj_angle,
-                                ctrl->pwm_output, ctrl->encoder->total_count,
-                                ctrl->fault_code);
-        }
-    }
-#endif
-
+#if PROTOCOL_VOFA_ONLY
     /* VOFA JustFloat output (non-blocking UART IT mode) */
     if (g_app.vofa_interval_ms > 0 &&
         (g_app.control_tick % g_app.vofa_interval_ms) == 0) {
@@ -202,6 +192,21 @@ void App_ControlUpdate(void)
         Vofa_SetChannel(&g_vofa, 9, g_app.controller[1].traj_angle);
         Vofa_Send(&g_vofa);
     }
+#else
+    /* Periodic standard binary status transmission */
+    if (g_app.status_interval_ms > 0 &&
+        (g_app.control_tick % g_app.status_interval_ms) == 0) {
+        for (int i = 0; i < MOTOR_NUM; i++) {
+            MotorController_t *ctrl = &g_app.controller[i];
+            uint8_t mode_state = (ctrl->mode & 0x0F) | ((ctrl->state & 0x0F) << 4);
+            Protocol_SendStatus(&g_app.protocol, i, mode_state,
+                                ctrl->actual_speed, ctrl->actual_angle,
+                                ctrl->traj_speed, ctrl->traj_angle,
+                                ctrl->pwm_output, ctrl->encoder->total_count,
+                                ctrl->fault_code);
+        }
+    }
+#endif
 
 }
 

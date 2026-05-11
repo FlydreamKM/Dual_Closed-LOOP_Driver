@@ -34,6 +34,7 @@ static uint8_t CalcChecksum(uint8_t *data, uint16_t len)
 }
 #endif
 
+#if PROTOCOL_VOFA_ONLY
 /* Lightweight ASCII to float parser (no libc dependency, no exp notation) */
 static float simple_atof(const char *s, char **endptr)
 {
@@ -64,6 +65,7 @@ static float simple_atof(const char *s, char **endptr)
     if (endptr) *endptr = (char *)p;
     return sign * (val + frac / div);
 }
+#endif
 
 static void Protocol_EnqueueCmd(Protocol_t *proto, ProtocolCmd_t *pcmd)
 {
@@ -74,6 +76,7 @@ static void Protocol_EnqueueCmd(Protocol_t *proto, ProtocolCmd_t *pcmd)
     }
 }
 
+#if PROTOCOL_VOFA_ONLY
 /* Parse FireWater-style text line and enqueue as binary command */
 static void Protocol_ParseTextLine(Protocol_t *proto, char *line)
 {
@@ -145,6 +148,7 @@ static void Protocol_ParseTextLine(Protocol_t *proto, char *line)
             break;
     }
 }
+#endif /* PROTOCOL_VOFA_ONLY */
 
 void Protocol_Init(Protocol_t *proto, UART_HandleTypeDef *huart)
 {
@@ -184,6 +188,7 @@ void Protocol_ProcessRx(Protocol_t *proto)
         uint8_t byte = proto->rx_dma_buf[read_idx];
         read_idx = (read_idx + 1) % PROTOCOL_RX_BUF_SIZE;
 
+#if PROTOCOL_VOFA_ONLY
         /* ---- FireWater text line handling ---- */
         if (byte == '\n' || byte == '\r') {
             if (proto->text_rx_idx > 0) {
@@ -194,9 +199,8 @@ void Protocol_ProcessRx(Protocol_t *proto)
         } else if (proto->text_rx_idx < sizeof(proto->text_rx_buf) - 1) {
             proto->text_rx_buf[proto->text_rx_idx++] = (char)byte;
         }
-
-#if !PROTOCOL_VOFA_ONLY
-        /* ---- Binary frame state machine (disabled in VOFA-only mode) ---- */
+#else
+        /* ---- Binary frame state machine ---- */
         switch (frame_state) {
             case 0:
                 if (byte == FRAME_SOF0) frame_state = 1;
@@ -276,7 +280,7 @@ void Protocol_ProcessRx(Protocol_t *proto)
                 }
                 break;
         }
-#endif /* !PROTOCOL_VOFA_ONLY */
+#endif /* PROTOCOL_VOFA_ONLY */
     }
 
     proto->rx_read_idx = read_idx;
@@ -351,6 +355,7 @@ void Protocol_SendAck(Protocol_t *proto, uint8_t cmd, uint8_t result)
 #endif
 }
 
+#if PROTOCOL_VOFA_ONLY
 void Protocol_SendVofaJustFloat(Protocol_t *proto, float *channels, uint8_t num_channels)
 {
     static uint32_t call_cnt = 0;
@@ -430,6 +435,7 @@ void Protocol_SendVofaJustFloat(Protocol_t *proto, float *channels, uint8_t num_
         proto->tx_busy = 1;
     }
 }
+#endif /* PROTOCOL_VOFA_ONLY */
 
 void Protocol_TxCompleteCallback(Protocol_t *proto)
 {
