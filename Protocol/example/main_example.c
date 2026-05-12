@@ -87,6 +87,16 @@ static void on_frame_received(uint8_t cmd, const uint8_t *data, uint8_t data_len
             break;
         }
 
+        case BP_CMD_SET_PID_BOTH: {
+            bp_cmd_set_pid_both_t pid;
+            if (bp_parse_cmd_set_pid_both(data, data_len, &pid)) {
+                /* 同时设置两个电机的 PID（共用同一组参数） */
+                /* Controller_SetSpeedPID(&ctrl[0], pid.kp, pid.ki, pid.kd); */
+                /* Controller_SetSpeedPID(&ctrl[1], pid.kp, pid.ki, pid.kd); */
+            }
+            break;
+        }
+
         case BP_CMD_CONTROL: {
             bp_cmd_control_t ctrl;
             if (bp_parse_cmd_control(data, data_len, &ctrl)) {

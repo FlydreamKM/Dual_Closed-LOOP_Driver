@@ -105,8 +105,14 @@ static void Protocol_ParseTextLine(Protocol_t *proto, char *line)
             Protocol_EnqueueCmd(proto, &pcmd);
             break;
         }
-        case 'P': {  /* P motor pid_type kp ki kd */
-            int motor = (int)simple_atof(line, &line);
+        case 'P': {  /* P motor pid_type kp ki kd  /  PB pid_type kp ki kd */
+            int motor;
+            if (*line == 'B' || *line == 'b') {
+                line++;
+                motor = MOTOR_ID_BOTH;
+            } else {
+                motor = (int)simple_atof(line, &line);
+            }
             int ptype = (int)simple_atof(line, &line);
             float kp  = simple_atof(line, &line);
             float ki  = simple_atof(line, &line);
@@ -246,6 +252,18 @@ void Protocol_ProcessRx(Protocol_t *proto)
                                     memcpy(&pcmd.data.pid.kp, &frame_buf[3], 4);
                                     memcpy(&pcmd.data.pid.ki, &frame_buf[7], 4);
                                     memcpy(&pcmd.data.pid.kd, &frame_buf[11], 4);
+                                    Protocol_EnqueueCmd(proto, &pcmd);
+                                }
+                                break;
+
+                            case CMD_SET_PID_BOTH:
+                                if (frame_len >= 13) {
+                                    pcmd.cmd = CMD_SET_PID_BOTH;
+                                    pcmd.motor_id = MOTOR_ID_BOTH;
+                                    pcmd.data.pid.pid_type = frame_buf[1];
+                                    memcpy(&pcmd.data.pid.kp, &frame_buf[2], 4);
+                                    memcpy(&pcmd.data.pid.ki, &frame_buf[6], 4);
+                                    memcpy(&pcmd.data.pid.kd, &frame_buf[10], 4);
                                     Protocol_EnqueueCmd(proto, &pcmd);
                                 }
                                 break;

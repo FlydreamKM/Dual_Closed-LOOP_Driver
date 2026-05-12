@@ -2,7 +2,7 @@
 
 > **物理层**：UART2，115200-8-N1，小端模式 (Little-Endian)  
 > **适用模式**：`PROTOCOL_VOFA_ONLY = 0`（纯二进制协议）或 `PROTOCOL_VOFA_ONLY = 1`（纯 VOFA 模式）  
-> **版本**：v2.0 — 修正 `CMD_SET_TARGET` / `CMD_SET_PID` 帧长度定义
+> **版本**：v2.1 — 增加 `CMD_SET_PID_BOTH`（同时设置双电机 PID）
 
 ---
 
@@ -14,10 +14,11 @@
 - [四、下行帧 — 上位机 → 下位机](#四下行帧--上位机--下位机)
   - [4.1 CMD_SET_TARGET (0x01)](#41-cmd_set_target-0x01)
   - [4.2 CMD_SET_PID (0x02)](#42-cmd_set_pid-0x02)
-  - [4.3 CMD_CONTROL (0x03)](#43-cmd_control-0x03)
-  - [4.4 CMD_REQ_STATUS (0x04)](#44-cmd_req_status-0x04)
-  - [4.5 CMD_HEARTBEAT (0x05)](#45-cmd_heartbeat-0x05)
-  - [4.6 CMD_SET_VOFA (0x06)](#46-cmd_set_vofa-0x06)
+  - [4.3 CMD_SET_PID_BOTH (0x07)](#43-cmd_set_pid_both-0x07)
+  - [4.4 CMD_CONTROL (0x03)](#44-cmd_control-0x03)
+  - [4.5 CMD_REQ_STATUS (0x04)](#45-cmd_req_status-0x04)
+  - [4.6 CMD_HEARTBEAT (0x05)](#46-cmd_heartbeat-0x05)
+  - [4.7 CMD_SET_VOFA (0x06)](#47-cmd_set_vofa-0x06)
 - [五、上行帧 — 下位机 → 上位机](#五上行帧--下位机--上位机)
   - [5.1 RSP_STATUS (0x81)](#51-rsp_status-0x81)
   - [5.2 RSP_ACK (0x82)](#52-rsp_ack-0x82)
@@ -177,7 +178,47 @@ AA 55 0F 02 00 00 00 00 40 40 CD CC 4C 3F 00 00 00 00 XX
 
 ---
 
-### 4.3 CMD_CONTROL (0x03)
+### 4.3 CMD_SET_PID_BOTH (0x07)
+
+同时设置两个电机的 PID 参数（共用同一组参数）。
+
+**帧结构**：
+
+```
+[AA][55][0E][07] [pid_type] [kp] [ki] [kd] [CHK]
+      ↑   ↑   ↑       ↑        ↑    ↑    ↑
+     SOF  LEN CMD   1字节     4B   4B   4B
+```
+
+**LEN = 14**（CMD 1B + DATA 13B）
+
+**DATA 字段**：
+
+| 偏移 | 字段 | 类型 | 字节数 | 说明 |
+|------|------|------|--------|------|
+| 0 | `pid_type` | uint8 | 1 | `0x00`=速度环, `0x01`=位置环 |
+| 1 | `kp` | float32 | 4 | 比例增益 |
+| 5 | `ki` | float32 | 4 | 积分增益 |
+| 9 | `kd` | float32 | 4 | 微分增益 |
+
+**输出限制**：
+
+| 环路 | 输出限制 | 积分限制 |
+|------|----------|----------|
+| 速度环 | ±1000 | ±500 |
+| 位置环 | ±100 | ±50 |
+
+**示例**（双电机同时设置速度环：Kp=3.0, Ki=0.8, Kd=0.0）：
+
+```hex
+AA 55 0E 07 00 00 00 40 40 CD CC 4C 3F 00 00 00 00 XX
+```
+
+（注：`00 00 40 40` = 3.0f；`CD CC 4C 3F` = 0.8f）
+
+---
+
+### 4.4 CMD_CONTROL (0x03)
 
 电机控制指令（使能、失能、急停、回零、清除故障）。
 
@@ -218,7 +259,7 @@ AA 55 03 03 00 00 XX
 
 ---
 
-### 4.4 CMD_REQ_STATUS (0x04)
+### 4.5 CMD_REQ_STATUS (0x04)
 
 请求下位机发送一帧 STATUS 状态数据。
 
@@ -239,7 +280,7 @@ AA 55 03 03 00 00 XX
 
 ---
 
-### 4.5 CMD_HEARTBEAT (0x05)
+### 4.6 CMD_HEARTBEAT (0x05)
 
 心跳包，用于上位机保活检测。下位机收到后返回 RSP_ACK。
 
@@ -254,7 +295,7 @@ AA 55 03 03 00 00 XX
 
 ---
 
-### 4.6 CMD_SET_VOFA (0x06)
+### 4.7 CMD_SET_VOFA (0x06)
 
 设置 JustFloat 波形输出频率（仅在 `PROTOCOL_VOFA_ONLY = 1` 时有效）。
 
@@ -367,10 +408,8 @@ bit 7  bit 6  bit 5  bit 4 | bit 3  bit 2  bit 1  bit 0
 **示例**（心跳应答）：
 
 ```hex
-AA 55 03 82 05 00 8A
+AA 55 03 82 05 00 87
 ```
-
-（`CHK = 0x82 + 0x05 + 0x00 = 0x87`？等等，重新计算：`0x82 + 0x05 = 0x87`，+0 = `0x87`。上面我写 `8A` 是错的，应该是 `0x87`）
 
 ---
 
@@ -503,6 +542,7 @@ uart_send((uint8_t *)&speed, 4);  // 发送 00 00 A0 40
 |------|----------|--------|
 | SET_TARGET | 19 | 23 字节 |
 | SET_PID | 15 | 19 字节 |
+| SET_PID_BOTH | 14 | 18 字节 |
 | CONTROL | 3 | 7 字节 |
 | REQ_STATUS | 1 | 5 字节 |
 | HEARTBEAT | 1 | 5 字节 |
@@ -529,4 +569,8 @@ uart_send((uint8_t *)&speed, 4);  // 发送 00 00 A0 40
 - `PROTOCOL_VOFA_ONLY = 0`：仅解析二进制帧（`0xAA 0x55`），仅发送二进制 STATUS / ACK 帧。
 
 **不要**在两种模式间混用协议，会导致数据解析错误。
-- 标准 STATUS 帧按 `status_interval_ms` 间隔自动发送
+
+| 模式 | 接收 | 发送 | 默认行为 |
+|------|------|------|----------|
+| `PROTOCOL_VOFA_ONLY = 1` | FireWater 文本命令 | JustFloat 波形 | 上电即自动以 200 Hz 发送 |
+| `PROTOCOL_VOFA_ONLY = 0` | 二进制帧（`0xAA 0x55`） | STATUS / ACK 帧 | 自动周期性发送 STATUS（默认 100 Hz） |

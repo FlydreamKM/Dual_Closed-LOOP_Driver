@@ -191,6 +191,16 @@ uint8_t bp_build_cmd_set_pid(bp_builder_t *b, const bp_cmd_set_pid_t *cmd, uint8
     return bp_builder_finish(b, frame);
 }
 
+uint8_t bp_build_cmd_set_pid_both(bp_builder_t *b, const bp_cmd_set_pid_both_t *cmd, uint8_t **frame)
+{
+    bp_builder_begin(b, BP_CMD_SET_PID_BOTH);
+    bp_builder_write_u8 (b, cmd->pid_type);
+    bp_builder_write_float(b, cmd->kp);
+    bp_builder_write_float(b, cmd->ki);
+    bp_builder_write_float(b, cmd->kd);
+    return bp_builder_finish(b, frame);
+}
+
 uint8_t bp_build_cmd_control(bp_builder_t *b, const bp_cmd_control_t *cmd, uint8_t **frame)
 {
     bp_builder_begin(b, BP_CMD_CONTROL);
@@ -258,6 +268,18 @@ uint8_t bp_parse_cmd_set_pid(const uint8_t *data, uint8_t len, bp_cmd_set_pid_t 
     memcpy(&out->kp, &data[3],  4);
     memcpy(&out->ki, &data[7],  4);
     memcpy(&out->kd, &data[11], 4);
+    return 1;
+}
+
+uint8_t bp_parse_cmd_set_pid_both(const uint8_t *data, uint8_t len, bp_cmd_set_pid_both_t *out)
+{
+    /* CMD(1) + pid_type(1) + kp(4) + ki(4) + kd(4) = 13 */
+    if (len < 13) return 0;
+
+    out->pid_type   = data[1];
+    memcpy(&out->kp, &data[2],  4);
+    memcpy(&out->ki, &data[6],  4);
+    memcpy(&out->kd, &data[10], 4);
     return 1;
 }
 

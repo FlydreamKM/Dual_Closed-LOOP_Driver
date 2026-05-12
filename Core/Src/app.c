@@ -51,6 +51,7 @@ void App_Init(void)
 
     /* Motor 2: TIM1 enc, TIM3 PWM, PA5 dir */
     Encoder_Init(&g_app.encoder[1], &htim1);
+    g_app.encoder[1].invert = -1;   /* 电机2镜像安装，反转编码器计数方向 */
     Motor_Init(&g_app.motor[1], &htim3, TIM_CHANNEL_1, GPIOA, GPIO_PIN_5, 1000);
     Controller_Init(&g_app.controller[1], &g_app.encoder[1], &g_app.motor[1]);
 
@@ -110,6 +111,25 @@ static void App_ProcessCommand(ProtocolCmd_t *cmd)
                 } else {
                     Controller_SetPosPID(ctrl, cmd->data.pid.kp,
                                          cmd->data.pid.ki, cmd->data.pid.kd);
+                }
+                break;
+
+            case CMD_SET_PID_BOTH:
+                /* 同时设置两个电机的 PID（共用同一组参数） */
+                {
+                    MotorController_t *ctrl0 = &g_app.controller[0];
+                    MotorController_t *ctrl1 = &g_app.controller[1];
+                    if (cmd->data.pid.pid_type == 0) {
+                        Controller_SetSpeedPID(ctrl0, cmd->data.pid.kp,
+                                               cmd->data.pid.ki, cmd->data.pid.kd);
+                        Controller_SetSpeedPID(ctrl1, cmd->data.pid.kp,
+                                               cmd->data.pid.ki, cmd->data.pid.kd);
+                    } else {
+                        Controller_SetPosPID(ctrl0, cmd->data.pid.kp,
+                                             cmd->data.pid.ki, cmd->data.pid.kd);
+                        Controller_SetPosPID(ctrl1, cmd->data.pid.kp,
+                                             cmd->data.pid.ki, cmd->data.pid.kd);
+                    }
                 }
                 break;
 

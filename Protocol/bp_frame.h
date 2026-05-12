@@ -80,6 +80,19 @@ typedef struct {
 typedef bp_cmd_req_status_t bp_cmd_heartbeat_t; /**< 心跳包与请求状态结构相同 */
 
 /**
+ * @brief CMD_SET_PID_BOTH (0x07) 数据载荷
+ *
+ * LEN = 14，DATA 布局：
+ *   [pid_type:1][kp:4][ki:4][kd:4]
+ */
+typedef struct {
+    uint8_t  pid_type;      /**< 0=速度环, 1=位置环 */
+    float    kp;            /**< 比例增益 */
+    float    ki;            /**< 积分增益 */
+    float    kd;            /**< 微分增益 */
+} bp_cmd_set_pid_both_t;
+
+/**
  * @brief CMD_SET_VOFA (0x06) 数据载荷
  *
  * LEN = 3，DATA 布局：
@@ -167,6 +180,7 @@ uint8_t bp_builder_finish(bp_builder_t *builder, uint8_t **out_frame);
 
 uint8_t bp_build_cmd_set_target (bp_builder_t *b, const bp_cmd_set_target_t  *cmd, uint8_t **frame);
 uint8_t bp_build_cmd_set_pid    (bp_builder_t *b, const bp_cmd_set_pid_t     *cmd, uint8_t **frame);
+uint8_t bp_build_cmd_set_pid_both(bp_builder_t *b, const bp_cmd_set_pid_both_t *cmd, uint8_t **frame);
 uint8_t bp_build_cmd_control    (bp_builder_t *b, const bp_cmd_control_t     *cmd, uint8_t **frame);
 uint8_t bp_build_cmd_set_vofa   (bp_builder_t *b, const bp_cmd_set_vofa_t    *cmd, uint8_t **frame);
 uint8_t bp_build_rsp_status     (bp_builder_t *b, const bp_rsp_status_t      *rsp, uint8_t **frame);
@@ -185,6 +199,7 @@ uint8_t bp_build_rsp_ack        (bp_builder_t *b, const bp_rsp_ack_t         *rs
  */
 uint8_t bp_parse_cmd_set_target (const uint8_t *data, uint8_t len, bp_cmd_set_target_t  *out);
 uint8_t bp_parse_cmd_set_pid    (const uint8_t *data, uint8_t len, bp_cmd_set_pid_t     *out);
+uint8_t bp_parse_cmd_set_pid_both(const uint8_t *data, uint8_t len, bp_cmd_set_pid_both_t *out);
 uint8_t bp_parse_cmd_control    (const uint8_t *data, uint8_t len, bp_cmd_control_t     *out);
 uint8_t bp_parse_cmd_set_vofa   (const uint8_t *data, uint8_t len, bp_cmd_set_vofa_t    *out);
 uint8_t bp_parse_rsp_status     (const uint8_t *data, uint8_t len, bp_rsp_status_t      *out);

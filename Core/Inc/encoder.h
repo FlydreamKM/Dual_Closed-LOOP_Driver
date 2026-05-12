@@ -35,6 +35,7 @@ extern "C" {
 
 typedef struct {
     TIM_HandleTypeDef *htim;
+    int8_t invert;          /* 1 = 正常, -1 = 反转编码器方向（镜像安装时使用） */
     volatile int32_t overflow_count;
     int32_t last_count;
     volatile int32_t total_count;

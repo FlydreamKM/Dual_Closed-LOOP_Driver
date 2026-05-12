@@ -42,6 +42,7 @@ extern "C" {
 #define BP_CMD_REQ_STATUS   0x04    /**< 请求状态帧 */
 #define BP_CMD_HEARTBEAT    0x05    /**< 心跳包 */
 #define BP_CMD_SET_VOFA     0x06    /**< 设置 JustFloat 波形输出频率 */
+#define BP_CMD_SET_PID_BOTH 0x07    /**< 同时设置两个电机的 PID 参数 */
 
 /* ===================================================================
  * 响应码（上行：下位机 -> 上位机）

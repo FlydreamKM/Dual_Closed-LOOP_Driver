@@ -29,7 +29,7 @@ extern "C" {
  *   1 = VOFA-only (FireWater text commands + JustFloat output only)
  *   0 = Binary-only (0xAA 0x55 frames only, no JustFloat output)
  */
-#define PROTOCOL_VOFA_ONLY      0
+#define PROTOCOL_VOFA_ONLY      1
 
 #define PROTOCOL_RX_BUF_SIZE    256
 #define PROTOCOL_TX_BUF_SIZE    256
@@ -42,6 +42,7 @@ extern "C" {
 #define CMD_REQ_STATUS      0x04
 #define CMD_HEARTBEAT       0x05
 #define CMD_SET_VOFA        0x06   /* interval_ms */
+#define CMD_SET_PID_BOTH    0x07   /* 同时设置两个电机的 PID 参数 */
 
 /* Response codes */
 #define RSP_STATUS          0x81

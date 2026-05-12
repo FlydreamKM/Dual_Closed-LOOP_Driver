@@ -16,6 +16,7 @@
 void Encoder_Init(Encoder_t *enc, TIM_HandleTypeDef *htim)
 {
     enc->htim = htim;
+    enc->invert = 1;
     enc->overflow_count = 0;
     enc->last_count = 0;
     enc->total_count = 0;
@@ -56,6 +57,9 @@ void Encoder_Update(Encoder_t *enc)
     /* Compensate for multiple overflows that occurred between updates */
     diff += enc->overflow_count * 65536;
     enc->overflow_count = 0;
+
+    /* Invert counting direction for mirrored encoder installation */
+    diff *= enc->invert;
 
     enc->delta_count = diff;
     enc->total_count += diff;
